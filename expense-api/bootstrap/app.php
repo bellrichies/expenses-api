@@ -9,6 +9,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -53,6 +54,18 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (ModelNotFoundException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Resource not found',
+                    'errors' => [],
+                ], 404);
+            }
+        });
+
+        // ModelNotFoundException is converted to NotFoundHttpException before renderers run;
+        // this catches it so API clients always get clean JSON instead of a debug trace.
+        $exceptions->render(function (NotFoundHttpException $e, $request) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
