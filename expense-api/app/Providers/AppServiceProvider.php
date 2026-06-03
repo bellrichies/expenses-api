@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Models\Expense;
+use App\Models\User;
 use App\Policies\ExpensePolicy;
+use App\Policies\UserPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -17,16 +19,27 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Register policies explicitly (auto-discovery also covers this)
         Gate::policy(Expense::class, ExpensePolicy::class);
+        Gate::policy(User::class, UserPolicy::class);
 
-        // Scope the {expense} route binding to the authenticated user's company.
-        // A cross-tenant ID therefore returns 404 instead of leaking data.
+        // Scope {expense} binding to the authenticated user's company — cross-tenant
+        // IDs resolve to 404 rather than leaking another tenant's data (IDOR prevention).
         Route::bind('expense', function (string $value) {
             $query = Expense::where('id', $value);
 
             if ($user = request()->user()) {
                 $query->where('company_id', $user->company_id);
+            }
+
+            return $query->firstOrFail();
+        });
+
+        // Same isolation for {user} — an Admin can only resolve users in their own company.
+        Route::bind('user', function (string $value) {
+            $query = User::where('id', $value);
+
+            if ($authUser = request()->user()) {
+                $query->where('company_id', $authUser->company_id);
             }
 
             return $query->firstOrFail();

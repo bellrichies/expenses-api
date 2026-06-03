@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 // Public auth routes
@@ -15,7 +16,8 @@ Route::middleware(['auth:sanctum', 'company.scope'])->group(function () {
     Route::get('/auth/user', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
-    // Expenses — read + create: any authenticated role
+    // ── Expenses ────────────────────────────────────────────────────────────
+    // Read + create: any authenticated role
     Route::get('expenses', [ExpenseController::class, 'index']);
     Route::get('expenses/{expense}', [ExpenseController::class, 'show']);
     Route::post('expenses', [ExpenseController::class, 'store']);
@@ -28,7 +30,12 @@ Route::middleware(['auth:sanctum', 'company.scope'])->group(function () {
     Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])
         ->middleware('role:Admin');
 
-    // Phase 4: User management (Admin only) — wired up when UserController is created
-    // Route::apiResource('users', \App\Http\Controllers\UserController::class)
-    //     ->middleware('role:Admin');
+    // ── User management ─────────────────────────────────────────────────────
+    // All user routes are Admin-only; UserPolicy + scoped binding enforce company isolation.
+    Route::middleware('role:Admin')->group(function () {
+        Route::get('users', [UserController::class, 'index']);
+        Route::post('users', [UserController::class, 'store']);
+        Route::put('users/{user}', [UserController::class, 'update']);
+        Route::delete('users/{user}', [UserController::class, 'destroy']);
+    });
 });

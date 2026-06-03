@@ -1,0 +1,21 @@
+<?php
+
+namespace App\Policies;
+
+use App\Enums\UserRole;
+use App\Models\User;
+
+class UserPolicy
+{
+    public function update(User $authUser, User $targetUser): bool
+    {
+        return $authUser->role === UserRole::Admin
+            && $authUser->company_id === $targetUser->company_id;
+    }
+
+    public function delete(User $authUser, User $targetUser): bool
+    {
+        return $authUser->role === UserRole::Admin
+            && $authUser->company_id === $targetUser->company_id;
+    }
+}

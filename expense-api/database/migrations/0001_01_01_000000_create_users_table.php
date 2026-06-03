@@ -12,12 +12,13 @@ return new class extends Migration
             $table->id();
             $table->foreignId('company_id')->constrained()->onDelete('cascade');
             $table->string('name');
-            $table->string('email')->unique();
+            $table->string('email');
             $table->string('password');
             $table->enum('role', ['Admin', 'Manager', 'Employee'])->default('Employee');
             $table->timestamps();
 
-            $table->index('company_id');
+            // Email is unique per company, not globally — same address may exist in different tenants.
+            $table->unique(['company_id', 'email']);
             $table->index('email');
             $table->index('role');
         });
