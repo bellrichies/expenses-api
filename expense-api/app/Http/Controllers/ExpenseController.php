@@ -6,8 +6,10 @@ use App\Http\Requests\StoreExpenseRequest;
 use App\Http\Requests\UpdateExpenseRequest;
 use App\Http\Resources\ExpenseResource;
 use App\Models\Expense;
+use App\Support\CacheKeys;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class ExpenseController extends Controller
 {
@@ -39,10 +41,10 @@ class ExpenseController extends Controller
             $query->whereDate('created_at', '<=', $request->date('to'));
         }
 
-        $sortBy    = in_array($request->get('sort_by'), ['amount', 'title', 'created_at'], true)
-            ? $request->get('sort_by')
+        $sortBy    = in_array($request->input('sort_by'), ['amount', 'title', 'created_at'], true)
+            ? $request->input('sort_by')
             : 'created_at';
-        $direction = $request->get('direction') === 'asc' ? 'asc' : 'desc';
+        $direction = $request->input('direction') === 'asc' ? 'asc' : 'desc';
 
         $expenses = $query->orderBy($sortBy, $direction)->paginate($perPage);
 
@@ -62,7 +64,7 @@ class ExpenseController extends Controller
     /**
      * GET /api/expenses/{expense}
      */
-    public function show(Request $request, Expense $expense): JsonResponse
+    public function show(Expense $expense): JsonResponse
     {
         $this->authorize('view', $expense);
 
@@ -91,6 +93,8 @@ class ExpenseController extends Controller
             'category'   => $request->validated('category'),
         ]);
 
+        $this->bustExpenseCache($user->id, $user->company_id);
+
         $expense->load(['user:id,name,company_id', 'company:id,name']);
 
         return response()->json([
@@ -109,6 +113,9 @@ class ExpenseController extends Controller
         $this->authorize('update', $expense);
 
         $expense->update($request->validated());
+
+        $this->bustExpenseCache($expense->user_id, $expense->company_id);
+
         $expense->load(['user:id,name,company_id', 'company:id,name']);
 
         return response()->json([
@@ -126,12 +133,23 @@ class ExpenseController extends Controller
     {
         $this->authorize('delete', $expense);
 
+        $userId    = $expense->user_id;
+        $companyId = $expense->company_id;
+
         $expense->delete();
+
+        $this->bustExpenseCache($userId, $companyId);
 
         return response()->json([
             'success' => true,
             'message' => 'Expense deleted successfully',
             'data'    => null,
         ]);
+    }
+
+    private function bustExpenseCache(int $userId, int $companyId): void
+    {
+        Cache::forget(CacheKeys::userExpenseSummary($userId));
+        Cache::forget(CacheKeys::companyExpenseStats($companyId));
     }
 }

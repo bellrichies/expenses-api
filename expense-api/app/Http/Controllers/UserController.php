@@ -7,8 +7,10 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Jobs\SendWelcomeEmail;
 use App\Models\User;
+use App\Support\CacheKeys;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -17,31 +19,39 @@ class UserController extends Controller
 {
     /**
      * GET /api/users — Admin only, company-scoped, paginated, filterable by role.
+     * The full company users list is cached; filtering and pagination are applied
+     * in-memory on the cached collection so write invalidation is a single key.
      */
     public function index(Request $request): JsonResponse
     {
         $companyId = $request->user()->company_id;
         $perPage   = max(1, min(100, $request->integer('per_page', 15)));
+        $page      = max(1, $request->integer('page', 1));
 
-        $query = User::query()
-            ->forCompany($companyId)
-            ->with('company:id,name');
+        $allUsers = Cache::remember(
+            CacheKeys::companyUsers($companyId),
+            CacheKeys::TTL_USERS,
+            fn () => User::forCompany($companyId)->with('company:id,name')->orderBy('name')->get()
+        );
 
+        // Apply optional role filter on the cached collection.
         if ($role = $request->string('role')->toString()) {
-            $query->where('role', $role);
+            $allUsers = $allUsers->filter(fn (User $u) => $u->role->value === $role)->values();
         }
 
-        $users = $query->orderBy('name')->paginate($perPage);
+        $total  = $allUsers->count();
+        $items  = $allUsers->slice(($page - 1) * $perPage, $perPage)->values();
+        $paginator = new LengthAwarePaginator($items, $total, $perPage, $page);
 
         return response()->json([
             'success' => true,
             'message' => 'Users retrieved successfully',
-            'data'    => UserResource::collection($users)->resolve(),
+            'data'    => UserResource::collection($paginator)->resolve(),
             'meta'    => [
-                'current_page' => $users->currentPage(),
-                'per_page'     => $users->perPage(),
-                'total'        => $users->total(),
-                'last_page'    => $users->lastPage(),
+                'current_page' => $paginator->currentPage(),
+                'per_page'     => $paginator->perPage(),
+                'total'        => $paginator->total(),
+                'last_page'    => $paginator->lastPage(),
             ],
         ]);
     }
@@ -53,7 +63,6 @@ class UserController extends Controller
     {
         $companyId = $request->user()->company_id;
 
-        // Use supplied password or auto-generate a secure temporary one.
         $plainPassword = $request->validated('password') ?? Str::password(12);
 
         $user = User::create([
@@ -64,10 +73,9 @@ class UserController extends Controller
             'role'       => $request->validated('role'),
         ]);
 
-        // Dispatch async — the queue worker will actually send the mail.
         SendWelcomeEmail::dispatch($user, $plainPassword);
 
-        Cache::forget("company.{$companyId}.users");
+        Cache::forget(CacheKeys::companyUsers($companyId));
 
         $user->load('company:id,name');
 
@@ -87,7 +95,7 @@ class UserController extends Controller
 
         $user->update($request->validated());
 
-        Cache::forget("company.{$user->company_id}.users");
+        Cache::forget(CacheKeys::companyUsers($user->company_id));
         $user->load('company:id,name');
 
         return response()->json([
@@ -104,7 +112,6 @@ class UserController extends Controller
     {
         $this->authorize('delete', $user);
 
-        // Prevent an admin from locking themselves out.
         if ($user->id === $request->user()->id) {
             return response()->json([
                 'success' => false,
@@ -116,7 +123,7 @@ class UserController extends Controller
         $companyId = $user->company_id;
         $user->delete();
 
-        Cache::forget("company.{$companyId}.users");
+        Cache::forget(CacheKeys::companyUsers($companyId));
 
         return response()->json([
             'success' => true,
