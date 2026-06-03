@@ -6,6 +6,7 @@ use App\Models\Expense;
 use App\Models\User;
 use App\Policies\ExpensePolicy;
 use App\Policies\UserPolicy;
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +21,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // This is an API-only application — never redirect unauthenticated
+        // requests to a login page. Always throw AuthenticationException so
+        // the JSON exception renderer in bootstrap/app.php can respond.
+        Authenticate::redirectUsing(fn () => null);
+
         // Throw on any lazy-loaded relation outside production so N+1 bugs
         // surface immediately in development and CI rather than silently
         // degrading performance in prod.

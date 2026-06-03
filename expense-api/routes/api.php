@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\UserController;
@@ -17,25 +18,26 @@ Route::middleware(['auth:sanctum', 'company.scope'])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     // ── Expenses ────────────────────────────────────────────────────────────
-    // Read + create: any authenticated role
     Route::get('expenses', [ExpenseController::class, 'index']);
     Route::get('expenses/{expense}', [ExpenseController::class, 'show']);
     Route::post('expenses', [ExpenseController::class, 'store']);
 
-    // Update — Manager or Admin only (belt); ExpensePolicy is the second gate (suspenders)
     Route::put('expenses/{expense}', [ExpenseController::class, 'update'])
         ->middleware('role:Manager,Admin');
 
-    // Delete — Admin only
     Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])
         ->middleware('role:Admin');
 
-    // ── User management ─────────────────────────────────────────────────────
-    // All user routes are Admin-only; UserPolicy + scoped binding enforce company isolation.
+    // ── Admin-only routes ────────────────────────────────────────────────────
     Route::middleware('role:Admin')->group(function () {
+        // User management
         Route::get('users', [UserController::class, 'index']);
         Route::post('users', [UserController::class, 'store']);
         Route::put('users/{user}', [UserController::class, 'update']);
         Route::delete('users/{user}', [UserController::class, 'destroy']);
+
+        // Audit trail (read-only)
+        Route::get('audit-logs', [AuditLogController::class, 'index']);
+        Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
     });
 });

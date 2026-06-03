@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Jobs\SendWelcomeEmail;
 use App\Models\User;
+use App\Support\ApiResponse;
 use App\Support\CacheKeys;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,8 +20,6 @@ class UserController extends Controller
 {
     /**
      * GET /api/users — Admin only, company-scoped, paginated, filterable by role.
-     * The full company users list is cached; filtering and pagination are applied
-     * in-memory on the cached collection so write invalidation is a single key.
      */
     public function index(Request $request): JsonResponse
     {
@@ -34,30 +33,19 @@ class UserController extends Controller
             fn () => User::forCompany($companyId)->with('company:id,name')->orderBy('name')->get()
         );
 
-        // Apply optional role filter on the cached collection.
         if ($role = $request->string('role')->toString()) {
             $allUsers = $allUsers->filter(fn (User $u) => $u->role->value === $role)->values();
         }
 
-        $total  = $allUsers->count();
-        $items  = $allUsers->slice(($page - 1) * $perPage, $perPage)->values();
+        $total     = $allUsers->count();
+        $items     = $allUsers->slice(($page - 1) * $perPage, $perPage)->values();
         $paginator = new LengthAwarePaginator($items, $total, $perPage, $page);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Users retrieved successfully',
-            'data'    => UserResource::collection($paginator)->resolve(),
-            'meta'    => [
-                'current_page' => $paginator->currentPage(),
-                'per_page'     => $paginator->perPage(),
-                'total'        => $paginator->total(),
-                'last_page'    => $paginator->lastPage(),
-            ],
-        ]);
+        return ApiResponse::paginated($paginator, 'Users retrieved successfully', UserResource::class);
     }
 
     /**
-     * POST /api/users — Admin only. Creates a user in the admin's company.
+     * POST /api/users — Admin only, creates a user in the admin's company.
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
@@ -79,15 +67,11 @@ class UserController extends Controller
 
         $user->load('company:id,name');
 
-        return response()->json([
-            'success' => true,
-            'message' => 'User created successfully',
-            'data'    => new UserResource($user),
-        ], 201);
+        return ApiResponse::success(new UserResource($user), 'User created successfully', 201);
     }
 
     /**
-     * PUT /api/users/{user} — Admin only. Updates name, email, or role.
+     * PUT /api/users/{user} — Admin only, updates name/email/role.
      */
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
@@ -98,11 +82,7 @@ class UserController extends Controller
         Cache::forget(CacheKeys::companyUsers($user->company_id));
         $user->load('company:id,name');
 
-        return response()->json([
-            'success' => true,
-            'message' => 'User updated successfully',
-            'data'    => new UserResource($user),
-        ]);
+        return ApiResponse::success(new UserResource($user), 'User updated successfully');
     }
 
     /**
@@ -113,11 +93,7 @@ class UserController extends Controller
         $this->authorize('delete', $user);
 
         if ($user->id === $request->user()->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You cannot delete your own account',
-                'errors'  => [],
-            ], 422);
+            return ApiResponse::error('You cannot delete your own account', [], 422);
         }
 
         $companyId = $user->company_id;
@@ -125,10 +101,6 @@ class UserController extends Controller
 
         Cache::forget(CacheKeys::companyUsers($companyId));
 
-        return response()->json([
-            'success' => true,
-            'message' => 'User deleted successfully',
-            'data'    => null,
-        ]);
+        return ApiResponse::success(null, 'User deleted successfully');
     }
 }

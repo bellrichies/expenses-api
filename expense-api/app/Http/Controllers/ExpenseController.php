@@ -6,16 +6,14 @@ use App\Http\Requests\StoreExpenseRequest;
 use App\Http\Requests\UpdateExpenseRequest;
 use App\Http\Resources\ExpenseResource;
 use App\Models\Expense;
-use App\Support\CacheKeys;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 
 class ExpenseController extends Controller
 {
     /**
-     * GET /api/expenses
-     * Paginated, searchable, company-scoped list with eager loading.
+     * GET /api/expenses — paginated, searchable, company-scoped list.
      */
     public function index(Request $request): JsonResponse
     {
@@ -29,11 +27,9 @@ class ExpenseController extends Controller
         if ($search = $request->string('search')->toString()) {
             $query->search($search);
         }
-
         if ($category = $request->string('category')->toString()) {
             $query->forCategory($category);
         }
-
         if ($request->filled('from')) {
             $query->whereDate('created_at', '>=', $request->date('from'));
         }
@@ -48,17 +44,7 @@ class ExpenseController extends Controller
 
         $expenses = $query->orderBy($sortBy, $direction)->paginate($perPage);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Expenses retrieved successfully',
-            'data'    => ExpenseResource::collection($expenses)->resolve(),
-            'meta'    => [
-                'current_page' => $expenses->currentPage(),
-                'per_page'     => $expenses->perPage(),
-                'total'        => $expenses->total(),
-                'last_page'    => $expenses->lastPage(),
-            ],
-        ]);
+        return ApiResponse::paginated($expenses, 'Expenses retrieved successfully', ExpenseResource::class);
     }
 
     /**
@@ -70,16 +56,11 @@ class ExpenseController extends Controller
 
         $expense->load(['user:id,name,company_id', 'company:id,name']);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Expense retrieved successfully',
-            'data'    => new ExpenseResource($expense),
-        ]);
+        return ApiResponse::success(new ExpenseResource($expense), 'Expense retrieved successfully');
     }
 
     /**
-     * POST /api/expenses
-     * Auto-assigns user_id + company_id from the authenticated user.
+     * POST /api/expenses — auto-assigns user_id + company_id.
      */
     public function store(StoreExpenseRequest $request): JsonResponse
     {
@@ -93,20 +74,14 @@ class ExpenseController extends Controller
             'category'   => $request->validated('category'),
         ]);
 
-        $this->bustExpenseCache($user->id, $user->company_id);
-
+        // Cache busting is handled by ExpenseObserver::created().
         $expense->load(['user:id,name,company_id', 'company:id,name']);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Expense created successfully',
-            'data'    => new ExpenseResource($expense),
-        ], 201);
+        return ApiResponse::success(new ExpenseResource($expense), 'Expense created successfully', 201);
     }
 
     /**
-     * PUT /api/expenses/{expense}
-     * Manager and Admin only (enforced by route middleware + ExpensePolicy).
+     * PUT /api/expenses/{expense} — Manager and Admin only.
      */
     public function update(UpdateExpenseRequest $request, Expense $expense): JsonResponse
     {
@@ -114,42 +89,22 @@ class ExpenseController extends Controller
 
         $expense->update($request->validated());
 
-        $this->bustExpenseCache($expense->user_id, $expense->company_id);
-
+        // Cache busting is handled by ExpenseObserver::updated().
         $expense->load(['user:id,name,company_id', 'company:id,name']);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Expense updated successfully',
-            'data'    => new ExpenseResource($expense),
-        ]);
+        return ApiResponse::success(new ExpenseResource($expense), 'Expense updated successfully');
     }
 
     /**
-     * DELETE /api/expenses/{expense}
-     * Admin only (enforced by route middleware + ExpensePolicy).
+     * DELETE /api/expenses/{expense} — Admin only.
      */
     public function destroy(Expense $expense): JsonResponse
     {
         $this->authorize('delete', $expense);
 
-        $userId    = $expense->user_id;
-        $companyId = $expense->company_id;
-
+        // Cache busting is handled by ExpenseObserver::deleted().
         $expense->delete();
 
-        $this->bustExpenseCache($userId, $companyId);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Expense deleted successfully',
-            'data'    => null,
-        ]);
-    }
-
-    private function bustExpenseCache(int $userId, int $companyId): void
-    {
-        Cache::forget(CacheKeys::userExpenseSummary($userId));
-        Cache::forget(CacheKeys::companyExpenseStats($companyId));
+        return ApiResponse::success(null, 'Expense deleted successfully');
     }
 }

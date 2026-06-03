@@ -2,8 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\ApiResponse;
 use Closure;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CompanyScope
@@ -12,23 +12,14 @@ class CompanyScope
     {
         $user = $request->user();
 
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Authentication required',
-                'errors' => [],
-            ], 401);
+        if (! $user) {
+            return ApiResponse::error('Authentication required', [], 401);
         }
 
-        if (!$user->company_id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User not associated with a company',
-                'errors' => [],
-            ], 403);
+        if (! $user->company_id) {
+            return ApiResponse::error('User not associated with a company', [], 403);
         }
 
-        // Expose company_id on the request so controllers can reference it directly
         $request->merge(['company_id' => $user->company_id]);
 
         return $next($request);
