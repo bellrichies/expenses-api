@@ -74,7 +74,7 @@ A secure, high-performance, multi-tenant REST API for managing company expenses.
 - **Standardised JSON envelope** (`ApiResponse` helper): `{success, message, data[, meta, errors]}`
 - **`ForceJsonResponse` middleware** — API routes always return JSON, never HTML error pages
 - **OpenAPI/Swagger docs** via `darkaonline/l5-swagger` — visit `/api/documentation`
-- **Postman collection** with auto-token test script in `docs/postman/`
+- **Postman collection + environment** in `docs/postman/` — auto-captures token, IDs and assertions on every response
 - **55 feature tests, 152 assertions** covering auth, RBAC, isolation, audit, N+1
 - **`UserPolicy` self-delete guard** — Admins cannot lock a company out by deleting their own account
 - **Per-company email uniqueness** — same email address allowed across different tenants
@@ -131,11 +131,59 @@ Test classes:
 
 ## Postman Collection
 
-Import `docs/postman/ExpenseAPI.postman_collection.json`.
+### Files
 
-1. Create a Postman Environment with `base_url = http://localhost:8000`
-2. Run **Login** — the test script automatically stores the token in `{{token}}`
-3. All subsequent requests use `{{token}}` in the `Authorization: Bearer {{token}}` header
+| File | Purpose |
+|---|---|
+| `docs/postman/Expenses_API.postman_collection.json` | All 14 endpoints across 4 folders with per-request test assertions and auto-variable scripts |
+| `docs/postman/Expenses_API_Local.postman_environment.json` | Pre-configured environment for local development |
+
+### Import
+
+1. Open Postman → **Import** (top-left)
+2. Drag and drop **both files** at once (collection + environment)
+3. Select the **"Expenses API – Local"** environment from the environment dropdown (top-right)
+
+### Environment Variables
+
+All variables below are managed automatically by test scripts — you never need to set them manually after the initial import.
+
+| Variable | Type | Set by | Cleared by |
+|---|---|---|---|
+| `base_url` | default | Pre-filled (`http://localhost:8000/api`) | — |
+| `token` | secret | Register · Login | Logout |
+| `user_id` | default | Register · Login | — |
+| `company_id` | default | Register · Login | — |
+| `expense_id` | default | Create Expense · List Expenses (first result) | Delete Expense |
+| `target_user_id` | default | Create User · List Users (first non-Admin) | Delete User |
+| `audit_log_id` | default | List Audit Logs (most recent entry) | — |
+
+### Recommended Test Flow
+
+```
+1. Auth / Register          → saves token, user_id, company_id
+2. Expenses / Create Expense → saves expense_id
+3. Expenses / List Expenses  → confirms pagination meta, refreshes expense_id
+4. Expenses / Show Expense   → validates expense shape
+5. Expenses / Update Expense → Manager or Admin role required
+6. Users / Create User       → saves target_user_id  (Admin token required)
+7. Users / List Users        → refreshes target_user_id (prefers non-Admin)
+8. Audit Logs / List         → saves audit_log_id    (Admin token required)
+9. Audit Logs / Show         → validates audit log shape
+10. Auth / Logout            → clears token
+```
+
+> **Testing multiple roles:** Use **Register** or **Login** with different credentials to swap the active token. The environment stores only one token at a time, so logging in as a Manager or Employee will replace the Admin token. Keep a second Postman environment (duplicate and rename) if you need both tokens simultaneously.
+
+### Collection-Level Assertions
+
+Every request automatically runs three baseline tests (defined at collection level):
+
+- Status code is below `500`
+- Response body is valid JSON
+- Response contains a `success` boolean field
+
+Individual requests layer additional assertions on top (field presence, status codes, pagination meta).
 
 ---
 
@@ -187,6 +235,8 @@ database/
 deploy/supervisor/expense-worker.conf  # Production Supervisor config
 docs/
 ├── API.md, SETUP.md, DEPLOY.md, PERFORMANCE.md
-└── postman/ExpenseAPI.postman_collection.json
+└── postman/
+    ├── Expenses_API.postman_collection.json
+    └── Expenses_API_Local.postman_environment.json
 tests/Feature/                      # 55 tests covering all phases
 ```
