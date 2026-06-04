@@ -90,11 +90,13 @@ class UserController extends Controller
      */
     public function destroy(Request $request, User $user): JsonResponse
     {
-        $this->authorize('delete', $user);
-
+        // Self-delete check runs before the policy so the response is a descriptive
+        // 422 rather than a silent 403 from UserPolicy::delete().
         if ($user->id === $request->user()->id) {
             return ApiResponse::error('You cannot delete your own account', [], 422);
         }
+
+        $this->authorize('delete', $user);
 
         $companyId = $user->company_id;
         $user->delete();
