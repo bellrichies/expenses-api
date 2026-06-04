@@ -11,9 +11,33 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use OpenApi\Attributes as OA;
 
 class AuthController extends Controller
 {
+    #[OA\Post(
+        path: '/auth/register',
+        summary: 'Register a new company and its first Admin user',
+        tags: ['Auth'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['name', 'email', 'password', 'password_confirmation', 'company_name', 'company_email'],
+                properties: [
+                    new OA\Property(property: 'name', type: 'string', example: 'Jane Smith'),
+                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'jane@acme.com'),
+                    new OA\Property(property: 'password', type: 'string', minLength: 8, example: 'secret123'),
+                    new OA\Property(property: 'password_confirmation', type: 'string', example: 'secret123'),
+                    new OA\Property(property: 'company_name', type: 'string', example: 'Acme Corp'),
+                    new OA\Property(property: 'company_email', type: 'string', format: 'email', example: 'info@acme.com'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Registration successful — token returned'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -46,6 +70,25 @@ class AuthController extends Controller
         ], 'User registered successfully', 201);
     }
 
+    #[OA\Post(
+        path: '/auth/login',
+        summary: 'Login and receive a Bearer token',
+        tags: ['Auth'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['email', 'password'],
+                properties: [
+                    new OA\Property(property: 'email', type: 'string', format: 'email'),
+                    new OA\Property(property: 'password', type: 'string'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Login successful — token returned'),
+            new OA\Response(response: 422, description: 'Wrong credentials'),
+        ]
+    )]
     public function login(Request $request): JsonResponse
     {
         $request->validate([
@@ -70,6 +113,16 @@ class AuthController extends Controller
         ], 'Login successful');
     }
 
+    #[OA\Post(
+        path: '/auth/logout',
+        summary: 'Revoke the current access token',
+        tags: ['Auth'],
+        security: [['sanctum' => []]],
+        responses: [
+            new OA\Response(response: 200, description: 'Logged out'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();
@@ -77,6 +130,16 @@ class AuthController extends Controller
         return ApiResponse::success(null, 'Logged out successfully');
     }
 
+    #[OA\Get(
+        path: '/auth/user',
+        summary: "Get the authenticated user's profile",
+        tags: ['Auth'],
+        security: [['sanctum' => []]],
+        responses: [
+            new OA\Response(response: 200, description: 'Profile retrieved'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function me(Request $request): JsonResponse
     {
         $user = $request->user()->load('company');

@@ -7,12 +7,28 @@ use App\Models\AuditLog;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use OpenApi\Attributes as OA;
 
 class AuditLogController extends Controller
 {
-    /**
-     * GET /api/audit-logs — Admin only, company-scoped, paginated, filterable.
-     */
+    #[OA\Get(
+        path: '/audit-logs',
+        summary: 'List audit logs (Admin only, company-scoped, filterable)',
+        security: [['sanctum' => []]],
+        tags: ['Audit Logs'],
+        parameters: [
+            new OA\Parameter(name: 'action', in: 'query', schema: new OA\Schema(type: 'string', enum: ['create', 'update', 'delete'])),
+            new OA\Parameter(name: 'model_type', in: 'query', schema: new OA\Schema(type: 'string', example: 'Expense')),
+            new OA\Parameter(name: 'user_id', in: 'query', schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'from', in: 'query', schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'to', in: 'query', schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer', default: 25)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Paginated audit log list'),
+            new OA\Response(response: 403, description: 'Admin role required'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $companyId = $request->user()->company_id;
@@ -43,9 +59,20 @@ class AuditLogController extends Controller
         return ApiResponse::paginated($logs, 'Audit logs retrieved successfully', AuditLogResource::class);
     }
 
-    /**
-     * GET /api/audit-logs/{auditLog} — Admin only.
-     */
+    #[OA\Get(
+        path: '/audit-logs/{id}',
+        summary: 'Get a single audit log entry (Admin only, company-scoped)',
+        security: [['sanctum' => []]],
+        tags: ['Audit Logs'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Audit log detail'),
+            new OA\Response(response: 403, description: 'Admin role required'),
+            new OA\Response(response: 404, description: 'Not found or cross-company'),
+        ]
+    )]
     public function show(Request $request, AuditLog $auditLog): JsonResponse
     {
         abort_if($auditLog->company_id !== $request->user()->company_id, 404);

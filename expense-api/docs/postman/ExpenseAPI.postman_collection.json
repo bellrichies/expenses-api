@@ -1,0 +1,304 @@
+{
+  "info": {
+    "name": "Expense Management API",
+    "_postman_id": "expense-api-v1",
+    "description": "Multi-Tenant SaaS Expense Management API — complete endpoint collection.\n\nEnvironment variables required:\n- `base_url` — e.g. http://localhost:8000\n- `token`    — automatically set by the Login request's test script",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token",    "value": "",                      "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (creates company + Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Admin\",\n  \"email\": \"jane@acme.test\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"company_name\": \"Acme Corp\",\n  \"company_email\": \"info@acme.test\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "if (pm.response.code === 201) {",
+                "  const json = pm.response.json();",
+                "  pm.environment.set('token', json.data.token);",
+                "  pm.test('Registration succeeded', () => pm.expect(json.success).to.be.true);",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane@acme.test\",\n  \"password\": \"password123\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "if (pm.response.code === 200) {",
+                "  const json = pm.response.json();",
+                "  pm.environment.set('token', json.data.token);",
+                "  pm.test('Login succeeded', () => pm.expect(json.success).to.be.true);",
+                "  pm.test('Token received', () => pm.expect(json.data.token).to.be.a('string'));",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/api/auth/user"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Profile retrieved', () => {",
+                "  const json = pm.response.json();",
+                "  pm.expect(pm.response.code).to.equal(200);",
+                "  pm.expect(json.data.user.role).to.be.a('string');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/api/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Expenses",
+      "item": [
+        {
+          "name": "List Expenses (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/expenses?per_page=10&sort_by=created_at&direction=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "expenses"],
+              "query": [
+                { "key": "per_page",  "value": "10" },
+                { "key": "sort_by",   "value": "created_at" },
+                { "key": "direction", "value": "desc" },
+                { "key": "search",    "value": "",    "disabled": true },
+                { "key": "category",  "value": "",    "disabled": true },
+                { "key": "from",      "value": "",    "disabled": true },
+                { "key": "to",        "value": "",    "disabled": true }
+              ]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Expenses listed', () => {",
+                "  pm.expect(pm.response.code).to.equal(200);",
+                "  const json = pm.response.json();",
+                "  pm.expect(json.meta).to.have.property('total');",
+                "  pm.collectionVariables.set('expense_id', json.data[0]?.id ?? '');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Single Expense",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/api/expenses/{{expense_id}}"
+          }
+        },
+        {
+          "name": "Create Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{base_url}}/api/expenses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Team lunch\",\n  \"amount\": 85.50,\n  \"category\": \"Food\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Expense created', () => pm.expect(pm.response.code).to.equal(201));",
+                "const json = pm.response.json();",
+                "pm.collectionVariables.set('expense_id', json.data.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update Expense (Manager/Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{base_url}}/api/expenses/{{expense_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 95.00,\n  \"category\": \"Food\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Expense (Admin only)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/api/expenses/{{expense_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Management (Admin only)",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/users?per_page=15",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users"],
+              "query": [
+                { "key": "per_page", "value": "15" },
+                { "key": "role",     "value": "",    "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{base_url}}/api/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bob Employee\",\n  \"email\": \"bob@acme.test\",\n  \"role\": \"Employee\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "if (pm.response.code === 201) {",
+                "  pm.collectionVariables.set('user_id', pm.response.json().data.id);",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Update User Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{base_url}}/api/users/{{user_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"Manager\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/api/users/{{user_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs (Admin only)",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs?per_page=25",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                { "key": "per_page",   "value": "25" },
+                { "key": "action",     "value": "",   "disabled": true },
+                { "key": "model_type", "value": "",   "disabled": true },
+                { "key": "user_id",    "value": "",   "disabled": true },
+                { "key": "from",       "value": "",   "disabled": true },
+                { "key": "to",         "value": "",   "disabled": true }
+              ]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Audit logs returned', () => {",
+                "  pm.expect(pm.response.code).to.equal(200);",
+                "  pm.collectionVariables.set('audit_log_id', pm.response.json().data[0]?.id ?? '');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get Single Audit Log",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{base_url}}/api/audit-logs/{{audit_log_id}}"
+          }
+        }
+      ]
+    }
+  ]
+}
