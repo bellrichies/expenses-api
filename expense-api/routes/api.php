@@ -14,6 +14,7 @@ Route::post('/auth/login',    [AuthController::class, 'login'])->middleware('thr
 Route::middleware(['auth:sanctum', 'company.scope'])->group(function () {
 
     // Auth utilities
+
     Route::get('/auth/user',  [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
