@@ -29,7 +29,7 @@ class AppServiceProvider extends ServiceProvider
         // Throw on any lazy-loaded relation outside production so N+1 bugs
         // surface immediately in development and CI rather than silently
         // degrading performance in prod.
-        Model::preventLazyLoading(! $this->app->isProduction());
+        Model::preventLazyLoading(! $this->app->environment('production'));
 
         Gate::policy(Expense::class, ExpensePolicy::class);
         Gate::policy(User::class, UserPolicy::class);

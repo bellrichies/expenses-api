@@ -1,0 +1,684 @@
+{
+    "info": {
+        "_postman_id": "c47ac10b-58cc-4372-a567-0e02b2c3d479",
+        "name": "Expenses API",
+        "description": "Multi-Tenant SaaS Expenses API — Laravel Sanctum authentication with company-scoped multi-tenancy.\n\nQuick start:\n1. Run **Auth / Register** (creates company + Admin user) — token is saved automatically.\n2. All subsequent requests use the saved `{{token}}` from the environment.\n3. IDs (expense_id, target_user_id, audit_log_id) are captured from list/create responses automatically.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [""]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "pm.test('Status code is below 500', function () {",
+                    "    pm.expect(pm.response.code).to.be.below(500);",
+                    "});",
+                    "",
+                    "pm.test('Response is valid JSON', function () {",
+                    "    pm.response.to.be.json;",
+                    "});",
+                    "",
+                    "pm.test('Response has success field', function () {",
+                    "    const res = pm.response.json();",
+                    "    pm.expect(res).to.have.property('success');",
+                    "});"
+                ]
+            }
+        }
+    ],
+    "item": [
+        {
+            "name": "Auth",
+            "description": "Public registration/login endpoints (rate-limited: 6 req/min) and protected auth utilities.",
+            "item": [
+                {
+                    "name": "Register",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Register returns 201', function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 201) {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.environment.set('token', res.data.token);",
+                                    "    pm.environment.set('user_id', res.data.user.id);",
+                                    "    pm.environment.set('company_id', res.data.user.company.id);",
+                                    "    console.log('✅ token, user_id, company_id saved');",
+                                    "    console.log('   user_id  :', res.data.user.id);",
+                                    "    console.log('   company  :', res.data.user.company.name);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": { "type": "noauth" },
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Jane Smith\",\n    \"email\": \"jane@acme.com\",\n    \"password\": \"secret123\",\n    \"password_confirmation\": \"secret123\",\n    \"company_name\": \"Acme Corp\",\n    \"company_email\": \"info@acme.com\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/auth/register",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "register"]
+                        },
+                        "description": "Creates a new company and its first Admin user. Returns a Bearer token."
+                    }
+                },
+                {
+                    "name": "Login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Login returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.environment.set('token', res.data.token);",
+                                    "    pm.environment.set('user_id', res.data.user.id);",
+                                    "    pm.environment.set('company_id', res.data.user.company.id);",
+                                    "    console.log('✅ token, user_id, company_id saved');",
+                                    "    console.log('   role     :', res.data.user.role);",
+                                    "    console.log('   company  :', res.data.user.company.name);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": { "type": "noauth" },
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"jane@acme.com\",\n    \"password\": \"secret123\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/auth/login",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "login"]
+                        },
+                        "description": "Authenticates a user and returns a Bearer token."
+                    }
+                },
+                {
+                    "name": "Me (Get Profile)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Me returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Profile has expected fields', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.data.user).to.have.all.keys('id', 'name', 'email', 'role', 'company');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/user",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "user"]
+                        },
+                        "description": "Returns the authenticated user's profile and company."
+                    }
+                },
+                {
+                    "name": "Logout",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Logout returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.environment.set('token', '');",
+                                    "    console.log('✅ token cleared from environment');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/logout",
+                            "host": ["{{base_url}}"],
+                            "path": ["auth", "logout"]
+                        },
+                        "description": "Revokes the current Bearer token."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Expenses",
+            "description": "Company-scoped expense CRUD. All routes require a Bearer token.\n\n- **Employee**: create + read own company expenses\n- **Manager**: create + read + update any expense\n- **Admin**: full CRUD including delete",
+            "item": [
+                {
+                    "name": "List Expenses",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('List Expenses returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Response contains pagination meta', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res).to.have.property('meta');",
+                                    "    pm.expect(res.meta).to.include.all.keys('current_page', 'per_page', 'total', 'last_page');",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    const res = pm.response.json();",
+                                    "    if (Array.isArray(res.data) && res.data.length > 0) {",
+                                    "        pm.environment.set('expense_id', res.data[0].id);",
+                                    "        console.log('✅ expense_id set to:', res.data[0].id);",
+                                    "    } else {",
+                                    "        console.log('ℹ️  No expenses found — run Create Expense first');",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/expenses?per_page=15",
+                            "host": ["{{base_url}}"],
+                            "path": ["expenses"],
+                            "query": [
+                                { "key": "search",    "value": "",          "description": "Search title or category (partial match)", "disabled": true },
+                                { "key": "category",  "value": "",          "description": "Exact category filter",                    "disabled": true },
+                                { "key": "from",      "value": "2025-01-01","description": "created_at >= (YYYY-MM-DD)",               "disabled": true },
+                                { "key": "to",        "value": "2025-12-31","description": "created_at <= (YYYY-MM-DD)",               "disabled": true },
+                                { "key": "sort_by",   "value": "created_at","description": "amount | title | created_at",             "disabled": true },
+                                { "key": "direction", "value": "desc",      "description": "asc | desc",                              "disabled": true },
+                                { "key": "per_page",  "value": "15" }
+                            ]
+                        },
+                        "description": "Paginated, filterable expense list for the authenticated user's company."
+                    }
+                },
+                {
+                    "name": "Create Expense",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Create Expense returns 201', function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 201) {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.environment.set('expense_id', res.data.id);",
+                                    "    console.log('✅ expense_id set to:', res.data.id);",
+                                    "    console.log('   title    :', res.data.title);",
+                                    "    console.log('   amount   :', res.data.amount);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "Accept",       "value": "application/json" }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"title\": \"Team lunch\",\n    \"amount\": 85.50,\n    \"category\": \"Food\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/expenses",
+                            "host": ["{{base_url}}"],
+                            "path": ["expenses"]
+                        },
+                        "description": "Creates an expense. `company_id` and `user_id` are derived automatically from the token."
+                    }
+                },
+                {
+                    "name": "Show Expense",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Show Expense returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Expense has all expected fields', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.data).to.include.all.keys(",
+                                    "        'id', 'title', 'amount', 'category',",
+                                    "        'user', 'company', 'created_at', 'updated_at'",
+                                    "    );",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/expenses/{{expense_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": ["expenses", "{{expense_id}}"]
+                        },
+                        "description": "Returns a single expense. Cross-company IDs return 404 (IDOR prevention)."
+                    }
+                },
+                {
+                    "name": "Update Expense (Manager | Admin)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Update Expense returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Response reflects updated data', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.success).to.be.true;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "Accept",       "value": "application/json" }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"title\": \"Team dinner\",\n    \"amount\": 120.00,\n    \"category\": \"Food\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/expenses/{{expense_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": ["expenses", "{{expense_id}}"]
+                        },
+                        "description": "Updates an expense. Requires Manager or Admin role. Changes are audit-logged."
+                    }
+                },
+                {
+                    "name": "Delete Expense (Admin)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Delete Expense returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.environment.unset('expense_id');",
+                                    "    console.log('✅ expense_id cleared from environment');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/expenses/{{expense_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": ["expenses", "{{expense_id}}"]
+                        },
+                        "description": "Deletes an expense. Requires Admin role. Deletion is audit-logged."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Users (Admin Only)",
+            "description": "User management within the authenticated Admin's company. All routes require the Admin role.",
+            "item": [
+                {
+                    "name": "List Users",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('List Users returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Response contains pagination meta', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res).to.have.property('meta');",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    const res = pm.response.json();",
+                                    "    if (Array.isArray(res.data) && res.data.length > 0) {",
+                                    "        // Prefer a non-Admin so update/delete tests are safer",
+                                    "        const target = res.data.find(u => u.role !== 'Admin') || res.data[0];",
+                                    "        pm.environment.set('target_user_id', target.id);",
+                                    "        console.log('✅ target_user_id set to:', target.id, '(role:', target.role + ')');",
+                                    "    } else {",
+                                    "        console.log('ℹ️  No users found');",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/users?per_page=15",
+                            "host": ["{{base_url}}"],
+                            "path": ["users"],
+                            "query": [
+                                { "key": "role",     "value": "",   "description": "Admin | Manager | Employee", "disabled": true },
+                                { "key": "per_page", "value": "15" },
+                                { "key": "page",     "value": "1",  "disabled": true }
+                            ]
+                        },
+                        "description": "Paginated list of company users. Results are served from Redis cache."
+                    }
+                },
+                {
+                    "name": "Create User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Create User returns 201', function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 201) {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.environment.set('target_user_id', res.data.id);",
+                                    "    console.log('✅ target_user_id set to:', res.data.id);",
+                                    "    console.log('   name     :', res.data.name);",
+                                    "    console.log('   role     :', res.data.role);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "Accept",       "value": "application/json" }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Bob Jones\",\n    \"email\": \"bob@acme.com\",\n    \"role\": \"Employee\",\n    \"password\": \"password123\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/users",
+                            "host": ["{{base_url}}"],
+                            "path": ["users"]
+                        },
+                        "description": "Creates a user in the Admin's company. `password` is optional — auto-generated if omitted. An async welcome email is dispatched."
+                    }
+                },
+                {
+                    "name": "Update User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Update User returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Response reflects updated data', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.success).to.be.true;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "Accept",       "value": "application/json" }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Bob Smith\",\n    \"role\": \"Manager\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/users/{{target_user_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": ["users", "{{target_user_id}}"]
+                        },
+                        "description": "Updates a user's name, email, or role. All fields are optional."
+                    }
+                },
+                {
+                    "name": "Delete User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Delete User returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    pm.environment.unset('target_user_id');",
+                                    "    console.log('✅ target_user_id cleared from environment');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/users/{{target_user_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": ["users", "{{target_user_id}}"]
+                        },
+                        "description": "Deletes a user. Returns 422 if you attempt to delete your own account."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Audit Logs (Admin Only)",
+            "description": "Read-only audit trail of all create/update/delete actions within the company. Admin only.",
+            "item": [
+                {
+                    "name": "List Audit Logs",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('List Audit Logs returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Response contains pagination meta', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res).to.have.property('meta');",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    const res = pm.response.json();",
+                                    "    if (Array.isArray(res.data) && res.data.length > 0) {",
+                                    "        pm.environment.set('audit_log_id', res.data[0].id);",
+                                    "        console.log('✅ audit_log_id set to:', res.data[0].id);",
+                                    "        console.log('   action   :', res.data[0].action);",
+                                    "        console.log('   model    :', res.data[0].model_type);",
+                                    "    } else {",
+                                    "        console.log('ℹ️  No audit logs yet — perform some expense/user actions first');",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/audit-logs?per_page=25",
+                            "host": ["{{base_url}}"],
+                            "path": ["audit-logs"],
+                            "query": [
+                                { "key": "action",     "value": "",   "description": "create | update | delete",     "disabled": true },
+                                { "key": "model_type", "value": "",   "description": "Expense | User",               "disabled": true },
+                                { "key": "user_id",    "value": "",   "description": "Filter by actor user ID",      "disabled": true },
+                                { "key": "from",       "value": "",   "description": "Date range start (YYYY-MM-DD)","disabled": true },
+                                { "key": "to",         "value": "",   "description": "Date range end (YYYY-MM-DD)",  "disabled": true },
+                                { "key": "per_page",   "value": "25" }
+                            ]
+                        },
+                        "description": "Paginated audit log ordered by most recent first."
+                    }
+                },
+                {
+                    "name": "Show Audit Log",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Show Audit Log returns 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('Audit log has all expected fields', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.data).to.include.all.keys(",
+                                    "        'id', 'action', 'model_type', 'model_id', 'changes', 'user', 'created_at'",
+                                    "    );",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            { "key": "Accept", "value": "application/json" }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/audit-logs/{{audit_log_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": ["audit-logs", "{{audit_log_id}}"]
+                        },
+                        "description": "Returns a single audit log entry. Cross-company IDs return 404."
+                    }
+                }
+            ]
+        }
+    ]
+}
